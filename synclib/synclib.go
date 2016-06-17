@@ -1,11 +1,14 @@
 package synclib
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
-	"httpsynccommon"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"log"
 	"net/url"
@@ -17,6 +20,76 @@ var (
 	dir           string
 )
 
+type FileInfo struct {
+	//Name    string    `json:"name"`
+	ModTime int64  `json:"modtime"`
+	Size    int64  `json:"size"`
+	Md5     string `json:"md5"`
+}
+
+func hash_file_md5(filePath string) string {
+	//Initialize variable returnMD5String now in case an error has to be returned
+	var returnMD5String string
+
+	//Open the passed argument and check for any error
+	file, err := os.Open(filePath)
+	if err != nil {
+		return returnMD5String
+	}
+
+	//Tell the program to call the following function when the current function returns
+	defer file.Close()
+
+	//Open a new hash interface to write to
+	hash := md5.New()
+
+	//Copy the file in the hash interface and check for any error
+	if _, err := io.Copy(hash, file); err != nil {
+		return returnMD5String
+	}
+
+	//Get the 16 bytes hash
+	hashInBytes := hash.Sum(nil)[:16]
+
+	//Convert the bytes to a string
+	returnMD5String = hex.EncodeToString(hashInBytes)
+
+	return returnMD5String
+
+}
+
+func buildFileStructure(dir string) map[string]FileInfo {
+	fileList := map[string]FileInfo{}
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		e := os.MkdirAll(dir, 0777)
+		if e != nil {
+			log.Println("could not create dir ", dir, "Error : ", e)
+			return fileList
+		}
+	}
+
+	err := filepath.Walk(dir, func(path string, f os.FileInfo, err error) error {
+		if err == nil {
+			if !f.IsDir() {
+				var fi FileInfo
+
+				//fi.Name = path
+				fi.ModTime = f.ModTime().UTC().Unix()
+				fi.Size = f.Size()
+				fi.Md5 = hash_file_md5(path)
+				//fileList = append(fileList, fi)
+				p := strings.TrimPrefix(path, dir)
+				fileList[p] = fi
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		log.Println("error file list", err)
+	}
+
+	return fileList
+}
 func Sync(server_url, directory string) {
 	//	remote_server = flag.String("url", "http://localhost:8181/fs", "set server url")
 	//	td := os.TempDir()
@@ -42,7 +115,7 @@ func Sync(server_url, directory string) {
 		//log.Println("server file content :", string(result))
 		if r.StatusCode == 200 {
 			log.Println("content ok, sync with it ", string(result))
-			content := map[string]httpsynccommon.FileInfo{}
+			content := map[string]FileInfo{}
 			sc := json.Unmarshal(result, &content)
 			if sc != nil {
 				log.Println("could not unmarshall server content, ", sc)
@@ -57,9 +130,9 @@ func Sync(server_url, directory string) {
 	}
 }
 
-func syncContent(remote map[string]httpsynccommon.FileInfo, dir string) {
+func syncContent(remote map[string]FileInfo, dir string) {
 
-	local := httpsynccommon.BuildFileStructure(dir)
+	local := buildFileStructure(dir)
 	log.Println("local content : ", local)
 	log.Println("get file not existing in local")
 	var files_to_download []string
