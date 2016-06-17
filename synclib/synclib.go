@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
-	"time"
 
 	"log"
 	"net/url"
@@ -69,8 +68,8 @@ func syncContent(remote map[string]httpsynccommon.FileInfo, dir string) {
 		lv, ok := local[k]
 		if ok {
 			//log.Println("file found :validate it by size", k, v)
-			if lv.Size != v.Size || lv.ModTime != v.ModTime {
-				log.Println("file differs by time or last access: Download", k)
+			if lv.Size != v.Size || lv.Md5 != v.Md5 {
+				log.Println("file differs by size or md5: Download", k)
 				files_to_download = append(files_to_download, k)
 
 			}
@@ -144,12 +143,7 @@ func downloadFile(srvpath string, mtime int64) bool {
 			return false
 		} else {
 			log.Println("File ok downloaded : ", file_path)
-			e := os.Chtimes(file_path, time.Now(), time.Unix(mtime, 0))
-			if e != nil {
-				log.Println("could not chtime of file ", file_path, " error ", e)
-			} else {
-				log.Println("Chtime OK ", file_path)
-			}
+
 			return true
 		}
 	}

@@ -2,17 +2,9 @@
 package main
 
 import (
-	_ "encoding/json"
 	"flag"
 	"http_sync_client/synclib"
-	_ "httpsynccommon"
-	_ "io/ioutil"
-	_ "net/http"
-	_ "path/filepath"
-	_ "time"
-
 	"log"
-	_ "net/url"
 	"os"
 )
 
