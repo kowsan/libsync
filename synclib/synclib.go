@@ -58,7 +58,7 @@ func hash_file_md5(filePath string) string {
 
 }
 
-func buildFileStructure(dir string) map[string]FileInfo {
+func BuildFileStructure(dir string, useCsumm bool) map[string]FileInfo {
 	fileList := map[string]FileInfo{}
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		e := os.MkdirAll(dir, 0777)
@@ -76,7 +76,12 @@ func buildFileStructure(dir string) map[string]FileInfo {
 				//fi.Name = path
 				fi.ModTime = f.ModTime().UTC().Unix()
 				fi.Size = f.Size()
-				fi.Md5 = hash_file_md5(path)
+				if useCsumm {
+					fi.Md5 = hash_file_md5(path)
+				} else {
+					fi.Md5 = "0"
+				}
+
 				//fileList = append(fileList, fi)
 				p := strings.TrimPrefix(path, dir)
 				fileList[p] = fi
@@ -90,7 +95,7 @@ func buildFileStructure(dir string) map[string]FileInfo {
 
 	return fileList
 }
-func Sync(server_url, directory string) {
+func Sync(server_url, directory string, useCsumm bool) {
 	//	remote_server = flag.String("url", "http://localhost:8181/fs", "set server url")
 	//	td := os.TempDir()
 	//	//td := "/home/kovalev/12345678"
@@ -120,8 +125,8 @@ func Sync(server_url, directory string) {
 			if sc != nil {
 				log.Println("could not unmarshall server content, ", sc)
 			} else {
-				log.Println("server content  OK: ", content)
-				syncContent(content, dir)
+				//log.Println("server content  OK: ", content)
+				syncContent(content, dir, useCsumm)
 			}
 
 		} else {
@@ -130,10 +135,10 @@ func Sync(server_url, directory string) {
 	}
 }
 
-func syncContent(remote map[string]FileInfo, dir string) {
+func syncContent(remote map[string]FileInfo, dir string, useCsumm bool) {
 
-	local := buildFileStructure(dir)
-	log.Println("local content : ", local)
+	local := BuildFileStructure(dir, useCsumm)
+	//log.Println("local content : ", local)
 	log.Println("get file not existing in local")
 	var files_to_download []string
 	var files_to_remove []string
@@ -141,7 +146,8 @@ func syncContent(remote map[string]FileInfo, dir string) {
 		lv, ok := local[k]
 		if ok {
 			//log.Println("file found :validate it by size", k, v)
-			if lv.Size != v.Size || lv.Md5 != v.Md5 {
+
+			if lv.Size != v.Size || (useCsumm && lv.Md5 != v.Md5) {
 				log.Println("file differs by size or md5: Download", k)
 				files_to_download = append(files_to_download, k)
 
@@ -149,7 +155,7 @@ func syncContent(remote map[string]FileInfo, dir string) {
 		} else {
 
 			files_to_download = append(files_to_download, k)
-			log.Println("Append file to download list : ", k)
+			//log.Println("Append file to download list : ", k)
 		}
 	}
 	log.Println("NEED Download files  : ", len(files_to_download))
@@ -158,14 +164,14 @@ func syncContent(remote map[string]FileInfo, dir string) {
 	}
 
 	//remove files existing locally
-	for k, v := range local {
+	for k, _ := range local {
 		_, ok := remote[k]
 		if ok {
 
 		} else {
 
 			files_to_remove = append(files_to_remove, k)
-			log.Println("Append file to remove list : ", k, v)
+			//log.Println("Append file to remove list : ", k, v)
 		}
 	}
 	log.Println("NEED Remove files  : ", len(files_to_remove))
@@ -183,7 +189,14 @@ func syncContent(remote map[string]FileInfo, dir string) {
 }
 
 func downloadFile(srvpath string, mtime int64) bool {
-	u, _ := url.Parse(remote_server + srvpath)
+	u, e := url.Parse(remote_server)
+	u.Path = srvpath
+	if e != nil {
+		log.Fatalln("Could not download  ", srvpath, e)
+	} else {
+
+	}
+	log.Println("download from network by path", srvpath)
 	log.Println("download from network by url", u.String())
 	r, e := http.Get(u.String())
 	if e != nil {
