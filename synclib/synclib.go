@@ -59,7 +59,10 @@ func hash_file_md5(filePath string) string {
 }
 
 func BuildFileStructure(dir string, useCsumm bool) map[string]FileInfo {
+
+	log.Println("Begin ", dir)
 	fileList := map[string]FileInfo{}
+
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		e := os.MkdirAll(dir, 0777)
 		if e != nil {
@@ -68,7 +71,7 @@ func BuildFileStructure(dir string, useCsumm bool) map[string]FileInfo {
 		}
 	}
 
-	err := filepath.Walk(dir, func(path string, f os.FileInfo, err error) error {
+	err := filepath.Walk(dir, func(f_path string, f os.FileInfo, err error) error {
 		if err == nil {
 			if !f.IsDir() {
 				var fi FileInfo
@@ -77,13 +80,15 @@ func BuildFileStructure(dir string, useCsumm bool) map[string]FileInfo {
 				fi.ModTime = f.ModTime().UTC().Unix()
 				fi.Size = f.Size()
 				if useCsumm {
-					fi.Md5 = hash_file_md5(path)
+					fi.Md5 = hash_file_md5(f_path)
 				} else {
 					fi.Md5 = "0"
 				}
 
 				//fileList = append(fileList, fi)
-				p := strings.TrimPrefix(path, dir)
+
+				p := strings.TrimPrefix(f_path, dir)
+				p = strings.Replace(p, "\\", "/", -1)
 				fileList[p] = fi
 			}
 		}
@@ -119,7 +124,7 @@ func Sync(server_url, directory string, useCsumm bool) {
 	} else {
 		//log.Println("server file content :", string(result))
 		if r.StatusCode == 200 {
-			log.Println("content ok, sync with it ", string(result))
+			log.Println("content ok, sync  it ")
 			content := map[string]FileInfo{}
 			sc := json.Unmarshal(result, &content)
 			if sc != nil {
@@ -179,7 +184,7 @@ func syncContent(remote map[string]FileInfo, dir string, useCsumm bool) {
 		fp := dir + v
 		e := os.Remove(fp)
 		if e != nil {
-			log.Println("Could not remove file ", fp)
+			log.Println("Could not remove file ", fp, e)
 		} else {
 			log.Println("file removed : ", fp)
 		}
@@ -193,45 +198,50 @@ func downloadFile(srvpath string, mtime int64) bool {
 	u.Path = srvpath
 	if e != nil {
 		log.Fatalln("Could not download  ", srvpath, e)
-	} else {
-
 	}
 	log.Println("download from network by path", srvpath)
 	log.Println("download from network by url", u.String())
 	r, e := http.Get(u.String())
 	if e != nil {
-		log.Println("could not download file : ", e)
-		return false
-	}
-	defer r.Body.Close()
-	b, e := ioutil.ReadAll(r.Body)
-	if e != nil {
-		log.Println("could not read file content : ", e)
-		return false
-	} else {
-		//make dir for file
-		file_path := dir + srvpath
-		file_dir := filepath.Dir(file_path)
-		if _, err := os.Stat(file_dir); os.IsNotExist(err) {
-			e := os.MkdirAll(file_dir, 0777)
-			if e != nil {
-				log.Println("could not create dir ", file_dir, "Error : ", e)
-				return false
+		log.Fatalln("could not download file : ", e)
 
-			} else {
-				log.Println("created directory  ", file_dir)
-			}
-		}
-		//write to file :
-		err := ioutil.WriteFile(file_path, b, 0666)
-		if err != nil {
-			log.Println("could not write file : ", file_path, " : ", err)
-			return false
+	}
+
+	//	b, e := ioutil.ReadAll(r.Body)
+	//	if e != nil {
+	//		log.Println("could not read file content : ", e)
+	//		return false
+	//	} else {
+	//make dir for file
+	file_path := dir + srvpath
+	file_dir := filepath.Dir(file_path)
+
+	if _, err := os.Stat(file_dir); os.IsNotExist(err) {
+		e := os.MkdirAll(file_dir, 0777)
+		if e != nil {
+			log.Fatalln("could not create dir ", file_dir, "Error : ", e)
+
 		} else {
-			log.Println("File ok downloaded : ", file_path)
-
-			return true
+			log.Println("created directory  ", file_dir)
 		}
 	}
+
+	//write to file :
+	fp, ex := os.OpenFile(file_path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+	if ex != nil {
+		log.Fatalln("Could not open file for write ", ex)
+	}
+	bytes_c, err := io.Copy(fp, r.Body)
+	defer fp.Close()
+	//err := ioutil.WriteFile(file_path, b, 0666)
+	if err != nil {
+		log.Fatalln("could not write file : ", file_path, " : ", err, bytes_c)
+
+	} else {
+		log.Println("File ok downloaded : ", file_path, bytes_c)
+
+		return true
+	}
+
 	return true
 }

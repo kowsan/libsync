@@ -3,7 +3,7 @@ package main
 
 import (
 	"flag"
-	"http_sync_client/synclib"
+	"github.com/kowsan/libsync/synclib"
 	"log"
 	"os"
 )
